@@ -3,11 +3,14 @@ package main
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
+	"strconv"
+	"strings"
 
 	"golang.org/x/crypto/bcrypt"
 	"google.golang.org/appengine"
@@ -21,6 +24,7 @@ type Player struct {
 	Pwd   string
 	Salt  string
 	Score int64
+	Sig   string
 }
 
 // PlayerScore returned to clients.
@@ -32,6 +36,7 @@ type PlayerScore struct {
 const playerEntityKind string = "player"
 
 var errPasswordInvalid = errors.New("Invalid password")
+var errSigInvalid = errors.New("Invalid sig")
 
 func main() {
 	http.HandleFunc("/", handle)
@@ -93,6 +98,10 @@ func storeHighscore(ctx context.Context, w http.ResponseWriter, r *http.Request)
 			err = errPasswordInvalid
 		}
 
+		if !checkSigCorrect(player) {
+			err = errSigInvalid
+		}
+
 		return err
 	}, nil)
 
@@ -136,4 +145,11 @@ func randomString(len int) string {
 	rand.Read(buff)
 	str := base64.StdEncoding.EncodeToString(buff)
 	return str[:len]
+}
+
+func checkSigCorrect(p Player) bool {
+	h := sha256.New()
+	h.Write([]byte("hr" + p.Name + strconv.FormatInt(p.Score, 10) + "salt"))
+	hexString := fmt.Sprintf("%x", h.Sum(nil))
+	return strings.EqualFold(hexString, p.Sig)
 }
