@@ -156,3 +156,5 @@ Make sure to customize the sigString, and modify checkSigCorrect() function from
     }
    ```
    
+#### License
+See the LICENSE file for license (MIT).
