@@ -18,7 +18,7 @@ Note: Sig field is used for validation.
 To prevent manual posting of scores this leaderboard uses signature. Signature is generated on client and
 checked on the server, see function checkSigCorrect() in scores.go source file.
  
-#### Leaderboard sample usage
+#### Leaderboard sample published app
 https://play.google.com/store/apps/details?id=com.kurovsky.christmashomes
 
 #### Android sample for posting highscores
