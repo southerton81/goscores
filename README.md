@@ -22,86 +22,26 @@ checked on the server, see function checkSigCorrect() in scores.go source file.
 https://play.google.com/store/apps/details?id=com.kurovsky.christmashomes
 
 #### Android sample for posting highscores
-```
-    class UserScore {
-        @SerializedName("Name")
-        public String Name = "";
+``` 
+	data class UserScore(val Name: String = "", val Score: Long? = 0L, val Sig: String = "")
 
-        @SerializedName("Score")
-        public Long Score = 0L;
-
-        @SerializedName("Sig")
-        public String Sig = "";
-    }
-    
-    class PostScoreTask extends AsyncTask  {
-        @Override
-        protected Object doInBackground(Object[] strings) {
-            BufferedReader in = null;
-            Integer responseCode = null;
-
-            try {
-                URL obj = new URL(URL);
-                HttpsURLConnection con = (HttpsURLConnection) obj.openConnection();
-                con.setRequestMethod("POST");
-                con.setRequestProperty("User-Agent", "app");
-                con.setRequestProperty("Accept-Language", "en-US,en;q=0.5");
-                String name = (String) strings[0];
-                String pwd = (String) strings[1];
-                String score = (String) strings[2];
-                String urlParameters = "{\"Name\":\"" + name +
-                        "\",\"Pwd\":\"" + pwd +
-                        "\",\"Score\":" + score +
-                        ",\"Sig\":\"" + generateSig(name, score) + "\"}";
-                con.setDoOutput(true);
-                DataOutputStream wr = new DataOutputStream(con.getOutputStream());
-                wr.writeBytes(urlParameters);
-                wr.flush();
-                wr.close();
-                responseCode = con.getResponseCode();
-            } catch (Exception e) {
-                e.printStackTrace();
-            } finally {
-                if (in != null) {
-                    try {
-                        in.close();
-                    } catch (IOException e) {
-                        e.printStackTrace();
+        GlobalScope.launch {
+            val userScore = UserScore("Name", 100, "Signature")
+            val responseCode = URL("url")
+                    .openConnection()
+                    .let {
+                        it as HttpURLConnection
+                    }.run {
+                        setRequestProperty("Content-Type", "application/json; charset=utf-8")
+                        requestMethod = "POST"
+                        doOutput = true
+                        val outputWriter = OutputStreamWriter(outputStream)
+                        outputWriter.write(Gson().toJson(userScore))
+                        outputWriter.flush()
+                        outputWriter.close()
+                        responseCode
                     }
-                }
-
-            }
-
-            return responseCode;
         }
-
-        @Override
-        protected void onPostExecute(Object o) {
-            super.onPostExecute(o);
-            // ...
-        }
-    }
-
-   public static String generateSig(String name, String score) {
-        try {
-            String sigString = "hr" + name + score + "salt";
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            byte[] hash = digest.digest(sigString.getBytes("UTF-8"));
-            return bytesToHex(hash);
-        } catch (Exception e) {
-            e.printStackTrace();
-            return "congrats";
-        }
-    }
-
-    private static String bytesToHex(byte[] bytes) {
-        StringBuilder sb = new StringBuilder();
-        for (byte aByte : bytes) {
-            String st = String.format("%02X", aByte);
-            sb.append(st);
-        }
-        return sb.toString();
-    }
 ```
 
 Make sure to customize the sigString, and modify checkSigCorrect() function from scores.go accordingly. 
@@ -109,52 +49,9 @@ Make sure to customize the sigString, and modify checkSigCorrect() function from
 
 #### Android sample for getting highscores
 ```
- class GetScoresTask extends AsyncTask {
-        @Override
-        protected Object doInBackground(Object[] strings) {
-            BufferedReader in = null;
-
-            Integer responseCode = null;
-            UserScore[] data = null;
-
-            try {
-                URL obj = new URL(URL);
-                HttpsURLConnection con = (HttpsURLConnection) obj.openConnection();
-                con.setRequestMethod("GET");
-                con.setRequestProperty("User-Agent", "app");
-                con.setRequestProperty("Accept-Language", "en-US,en;q=0.5");
-                in = new BufferedReader(new InputStreamReader(con.getInputStream()));
-                String inputLine;
-                StringBuffer response = new StringBuffer();
-                while ((inputLine = in.readLine()) != null) {
-                    response.append(inputLine);
-                }
-
-                Gson gson = new Gson();
-                data = gson.fromJson(response.toString(), UserScore[].class); 
-            } catch (Exception e) {
-                e.printStackTrace();
-            } finally {
-                if (in != null) {
-                    try {
-                        in.close();
-                    } catch (IOException e) {
-                        e.printStackTrace();
-                    }
-                }
-
-            }
-
-            return data;
+	GlobalScope.launch {
+            val usersScoresJson = URL("url").readText()
+            val usersScores = Gson().fromJson<List<UserScore>>(usersScoresJson, object : TypeToken<List<UserScore>>() {}.type)
         }
-
-        @Override
-        protected void onPostExecute(Object o) {
-            super.onPostExecute(o);
-            // ...
-        }
-    }
-   ```
+```
    
-#### License
-See the LICENSE file for license (MIT).
