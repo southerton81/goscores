@@ -1,6 +1,7 @@
 package main
 
 import (
+	"os"
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
@@ -11,11 +12,10 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"log"
 
 	"golang.org/x/crypto/bcrypt"
-	"google.golang.org/appengine"
-	"google.golang.org/appengine/datastore"
-	"google.golang.org/appengine/log"
+	"cloud.google.com/go/datastore"
 )
 
 // Player as it is stored in db.
@@ -40,32 +40,49 @@ var errSigInvalid = errors.New("Invalid sig")
 
 func main() {
 	http.HandleFunc("/", handle)
-	appengine.Main()
-}
+	
+	port := os.Getenv("PORT")
+	if port == "" {
+        port = "8080"
+        log.Printf("Defaulting to port %s", port)
+	}
 
-func handle(w http.ResponseWriter, r *http.Request) {
-	ctx := appengine.NewContext(r)
-
-	if r.Method == "POST" {
-		storeHighscore(ctx, w, r)
-	} else if r.Method == "GET" {
-		getHighscores(ctx, w, r)
+	log.Printf("Listening on port %s", port)
+	if err := http.ListenAndServe(":"+port, nil); err != nil {
+        log.Fatal(err)
 	}
 }
 
-func getHighscores(ctx context.Context, w http.ResponseWriter, r *http.Request) {
+func handle(w http.ResponseWriter, r *http.Request) {
+	dsClient, err := datastore.NewClient(r.Context(), "homemaker-225521")
+	if err != nil {
+		log.Fatalf("Error: %v", err)
+	}
+	defer dsClient.Close()
+
+	if r.Method == "POST" {
+		storeHighscore(dsClient, w, r)
+	} else if r.Method == "GET" {
+		getHighscores(dsClient, w, r)
+	}
+}
+
+func getHighscores(dsClient *datastore.Client, w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+ 
 	q := datastore.NewQuery(playerEntityKind).Order("-Score")
 	var scores []PlayerScore
-	if _, err := q.GetAll(ctx, &scores); err != nil {
+	if _, err := dsClient.GetAll(ctx, q, &scores); err != nil {
 		res1B, _ := json.Marshal(scores)
 		fmt.Fprintf(w, string(res1B))
 	} else {
-		log.Errorf(ctx, "Error: %v", err)
+		log.Fatalf("Error: %v", err)
 		fmt.Fprintf(w, "[]")
 	}
 }
 
-func storeHighscore(ctx context.Context, w http.ResponseWriter, r *http.Request) {
+func storeHighscore(dsClient *datastore.Client, w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
 	player, err := parsePlayerRequestBody(w, r)
 	if err != nil {
 		http.Error(w, errors.New("Error parsing request body").Error(), http.StatusBadRequest)
@@ -78,11 +95,11 @@ func storeHighscore(ctx context.Context, w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	key := datastore.NewKey(ctx, playerEntityKind, player.Name, 0, nil)
+	key := datastore.NameKey(playerEntityKind, player.Name, nil)
 
 	storedPlayer := new(Player)
-	err = datastore.RunInTransaction(ctx, func(ctx context.Context) error {
-		datastoreGetErr := datastore.Get(ctx, key, storedPlayer)
+	_, err = dsClient.RunInTransaction(ctx, func(tx *datastore.Transaction) error {
+		datastoreGetErr := tx.Get(key, storedPlayer)
 		if datastoreGetErr != nil && datastoreGetErr != datastore.ErrNoSuchEntity {
 			return datastoreGetErr
 		}
@@ -92,7 +109,7 @@ func storeHighscore(ctx context.Context, w http.ResponseWriter, r *http.Request)
 			hash, err := hashPassword(ctx, password+player.Salt)
 			if err == nil {
 				player.Pwd = hash
-				_, err = datastore.Put(ctx, key, &player)
+				_, err = tx.Put(key, &player)
 			}
 		} else {
 			err = errPasswordInvalid
@@ -103,10 +120,10 @@ func storeHighscore(ctx context.Context, w http.ResponseWriter, r *http.Request)
 		}
 
 		return err
-	}, nil)
+	})
 
 	if err != nil {
-		log.Errorf(ctx, "Error: %v", err)
+		log.Fatalf("Error: %v", err)
 		if err == errPasswordInvalid {
 			http.Error(w, err.Error(), http.StatusForbidden)
 		} else {
