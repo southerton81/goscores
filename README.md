@@ -1,5 +1,5 @@
 # GoScores
-Leaderboard server on Golang, made to be hosted on Google Cloud. Uses Cloud Datastore for storage.
+Leaderboard server on Golang, uses Cloud Datastore for storage.
 
 
 #### Player JSON
